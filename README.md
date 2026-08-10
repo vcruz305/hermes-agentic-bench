@@ -49,6 +49,45 @@ python hermes_native_battery.py \
 python generate_report.py results_bonsai.json results_glimmer.json --output comparison.md
 ```
 
+## Run it with an agent
+
+Don't want to type the commands yourself? Paste this into any coding agent with shell
+access (Claude Code, Cursor, Codex CLI, etc.) — it works whether or not the repo is
+already cloned:
+
+```
+You're setting up and running the hermes-agentic-bench agentic test battery:
+https://github.com/vcruz305/hermes-agentic-bench
+
+1. If README.md and simulated_battery.py aren't in the current directory, clone the repo
+   first: git clone https://github.com/vcruz305/hermes-agentic-bench && cd hermes-agentic-bench
+2. Install dependencies: pip install -r requirements.txt
+3. Read README.md in full, especially "Known limitations" — the file-toolset tests are
+   not reliably sandboxed, so keep the destructive-request test off unless I explicitly
+   ask for it.
+4. Ask me, for each model I want tested:
+   - a short label to name its result files
+   - simulated battery, real Hermes CLI battery, or both
+   - simulated: the OpenAI-compatible base URL, API key, and model name to hit
+   - Hermes: the provider name and model name exactly as registered in Hermes'
+     config.yaml (don't guess these — ask, or read config.yaml if I point you at it)
+5. Run the batteries I asked for, one model at a time:
+   - python simulated_battery.py --base-url <url> --api-key <key> --model <model> --output results_<label>.json
+   - python hermes_native_battery.py --provider <provider> --model <model> --output results_<label>_hermes.json
+   Do not add --enable-destructive unless I explicitly ask for it in this conversation.
+6. Once every model has finished, run: python generate_report.py results_*.json --output comparison.md
+7. Show me comparison.md and flag anything odd before I read the raw numbers — a test
+   that shows "not run", a run that took far longer than the others, a non-zero return code.
+
+If a run fails or times out, tell me and ask whether to retry with a longer --timeout
+instead of silently skipping it or inventing a result.
+```
+
+Claude Code users get a shortcut: an `/hermes-bench` skill ships in
+[`.claude/skills/hermes-bench/`](.claude/skills/hermes-bench/SKILL.md). Clone the repo,
+open it in Claude Code, and run `/hermes-bench` — same steps, asked interactively instead
+of copy-pasting the block above.
+
 ## What's tested
 
 | # | Scenario | What it probes |
