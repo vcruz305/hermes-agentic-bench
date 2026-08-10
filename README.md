@@ -1,3 +1,10 @@
+![hermes-agentic-bench](assets/banner.png)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/vcruz305/hermes-agentic-bench/pulls)
+[![Open Source](https://img.shields.io/badge/open%20source-%E2%9D%A4-blue.svg)](https://github.com/vcruz305/hermes-agentic-bench)
+
 # hermes-agentic-bench
 
 Small, honest agentic test batteries for local models — written because there's no
@@ -87,6 +94,21 @@ Claude Code users get a shortcut: an `/hermes-bench` skill ships in
 [`.claude/skills/hermes-bench/`](.claude/skills/hermes-bench/SKILL.md). Clone the repo,
 open it in Claude Code, and run `/hermes-bench` — same steps, asked interactively instead
 of copy-pasting the block above.
+
+**Hermes Agent users** get the same shortcut natively — most people testing a model
+they run *through* Hermes will find it easier to just ask their own Hermes agent to do
+this than to run the scripts by hand. Install the skill straight from this repo:
+
+```bash
+hermes skills install https://raw.githubusercontent.com/vcruz305/hermes-agentic-bench/main/hermes-skill/SKILL.md \
+  --category autonomous-ai-agents --yes
+```
+
+Then say "run hermes-bench against <provider>" (or similar) in a `hermes chat` session.
+The skill (source: [`hermes-skill/SKILL.md`](hermes-skill/SKILL.md)) walks the agent
+through cloning the repo, collecting per-model config, running the batteries via its own
+`terminal` tool, and reading back `comparison.md` — including the same
+`--enable-destructive` opt-in guard and timeout guidance as the copy-paste prompt above.
 
 ## What's tested
 
