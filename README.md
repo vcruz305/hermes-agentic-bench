@@ -1,4 +1,4 @@
-![hermes-agentic-bench](assets/banner.png)
+![hermes-agentic-bench](assets/banner.webp)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
