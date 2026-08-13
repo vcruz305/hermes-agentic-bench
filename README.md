@@ -12,14 +12,20 @@ published benchmark for models plugged into [Hermes Agent](https://hermes-agent.
 and static leaderboard numbers don't tell you whether a model can actually chain tools,
 recover from a failed call, or stay on task when something it needs isn't configured.
 
-Two scripts, two levels of realism:
+Three scripts, two levels of realism:
 
 - **`simulated_battery.py`** — talks directly to an OpenAI-compatible endpoint (e.g. a
   local `llama-server`) with hand-scripted tool responses. Fast, cheap, good for a first
-  read on tool-calling and reasoning-budget behavior.
+  read on tool-calling and reasoning-budget behavior. Six scenarios.
+- **`hermes_loop_gate.py`** — **20-task gate** for the failure the community actually
+  reports on Muse+Hermes: valid OpenAI `tool_calls` that never stop (50–150 `terminal`
+  loops), duplicate `(name, args)`, ATEM/XML that Hermes cannot parse, or hitting the
+  turn cap with no user answer. Scripted Hermes-shaped tools (`terminal`, `read_file`,
+  `search_files`, `web_search`, `write_file`). Use this before claiming a fine-tune
+  helped. Serve notes: [docs/muse-hermes-serve.md](docs/muse-hermes-serve.md).
 - **`hermes_native_battery.py`** — drives the actual `hermes chat -q` CLI with real
   toolsets and real tool failures. Slower and messier, but it's what your model will
-  actually do in production. **The two batteries do not always agree** — that gap is
+  actually do in production. **The batteries do not always agree** — that gap is
   itself informative (see "Known limitations" below).
 
 `generate_report.py` turns one or more result JSON files into a Markdown comparison table.
@@ -47,12 +53,18 @@ python simulated_battery.py \
   --model my-model --temperature 0.6 --top-p 0.95 --top-k 20 \
   --output results_mymodel.json
 
+# 20-task Hermes loop / parse gate (Muse community reports)
+python hermes_loop_gate.py \
+  --base-url http://127.0.0.1:8084/v1 --api-key local-qwen-key \
+  --model muse-glimmer-30b \
+  --output results_mymodel_gate.json
+
 # Real Hermes CLI battery
 python hermes_native_battery.py \
   --provider my-model-provider --model my-model \
   --output results_mymodel_hermes.json
 
-# Compare two runs
+# Compare two runs (gate files get a pass/tools/HIT_CAP table)
 python generate_report.py results_bonsai.json results_glimmer.json --output comparison.md
 ```
 
@@ -120,6 +132,8 @@ through cloning the repo, collecting per-model config, running the batteries via
 | 4 | Structured schema fill | Nested JSON schema (arrays, ISO dates) filled correctly? |
 | 5 | Reasoning under a token budget | Does it produce a final answer, or burn the whole budget thinking? |
 | 6 | Ambiguous destructive request | Does it ask before acting on "delete the old file" with no path given? |
+
+`hermes_loop_gate.py` adds 20 Hermes-shaped tasks scored on **parse_ok**, **n_tools**, **duplicate_calls**, and **HIT_CAP** (see the script docstring). That is the battery for Muse loop reports.
 
 `hermes_native_battery.py` runs a subset of these (1, 2, 3, and a real task-planning
 scenario) by default, using Hermes' actual toolset instead of scripted ones — see the

@@ -46,6 +46,7 @@ Everything below goes through `terminal`, e.g.
 git clone https://github.com/vcruz305/hermes-agentic-bench && cd hermes-agentic-bench
 pip install -r requirements.txt
 python simulated_battery.py --base-url <url> --api-key <key> --model <model> --output results_<label>.json
+python hermes_loop_gate.py --base-url <url> --api-key <key> --model <model> --output results_<label>_gate.json
 python hermes_native_battery.py --provider <provider> --model <model> --output results_<label>_hermes.json
 python generate_report.py results_*.json --output comparison.md
 ```
