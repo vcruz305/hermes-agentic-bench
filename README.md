@@ -12,27 +12,44 @@ published benchmark for models plugged into [Hermes Agent](https://hermes-agent.
 and static leaderboard numbers don't tell you whether a model can actually chain tools,
 recover from a failed call, or stay on task when something it needs isn't configured.
 
-Two scripts, two levels of realism:
+Three scripts, two levels of realism:
 
 - **`simulated_battery.py`** — talks directly to an OpenAI-compatible endpoint (e.g. a
   local `llama-server`) with hand-scripted tool responses. Fast, cheap, good for a first
-  read on tool-calling and reasoning-budget behavior.
+  read on tool-calling and reasoning-budget behavior. Six scenarios.
+- **`hermes_loop_gate.py`** — **20-task gate** for the failure the community actually
+  reports on Muse+Hermes: valid OpenAI `tool_calls` that never stop (50–150 `terminal`
+  loops), duplicate `(name, args)`, ATEM/XML that Hermes cannot parse, or hitting the
+  turn cap with no user answer. Scripted Hermes-shaped tools (`terminal`, `read_file`,
+  `search_files`, `web_search`, `write_file`). Use this before claiming a fine-tune
+  helped. Serve notes: [docs/muse-hermes-serve.md](docs/muse-hermes-serve.md).
 - **`hermes_native_battery.py`** — drives the actual `hermes chat -q` CLI with real
   toolsets and real tool failures. Slower and messier, but it's what your model will
-  actually do in production. **The two batteries do not always agree** — that gap is
+  actually do in production. **The batteries do not always agree** — that gap is
   itself informative (see "Known limitations" below).
 
 `generate_report.py` turns one or more result JSON files into a Markdown comparison table.
+Gate files also get a **pass / mean tools / HIT_CAP / parse-fail / dup** summary.
 
 This came out of an actual comparison ([Muse Glimmer 30B vs. Bonsai 27B](https://claude.ai/code/artifact/af013b83-dc66-4865-a6eb-ad7a2918cddf))
 where the simulated battery said one thing and the real Hermes sessions said another —
-that discrepancy is the reason this repo has two scripts instead of one.
+that discrepancy is the reason this repo has more than one script.
+
+## Latest
+
+- **`hermes_loop_gate.py`** — 20 Hermes-shaped tasks for the failure people actually report: the model *does* emit OpenAI `tool_calls`, then never stops (`HIT_CAP`), repeats `(name, args)`, or dumps ATEM/XML that Hermes cannot parse (`parse_fails`).
+- **`generate_report.py`** understands gate JSON (PASS/FAIL + tools + HIT_CAP + dups), not just elapsed seconds.
+- **[docs/muse-hermes-serve.md](docs/muse-hermes-serve.md)** — Muse + Hermes recipe: **DFlash off** for tool runs, Unsloth `--disable-tools`, modest context. 131k + speculation is how loops eat the Hermes tool cap.
+- **[docs/sft-notes.md](docs/sft-notes.md)** — a generic multi-teacher distill is the wrong *main* mix for this bug. Seal this gate before and after any SFT.
+
+A first Muse Glimmer UD-Q4_K_XL run (32k, DFlash off, one 24GB card) scored **7/20**, mean **5.7** tools, **7 HIT_CAP**, **0** parse-fail tasks. Short one-shots pass; open-ended `terminal`/`search` traces hit the 12-turn cap with no answer. Treat that as a labeled baseline, not a leaderboard. Re-run on your box.
 
 ## Prerequisites
 
 - Python 3.9+
-- For `simulated_battery.py`: any OpenAI-compatible chat completions endpoint
-  (llama.cpp's `llama-server`, vLLM, etc.) — `pip install -r requirements.txt`
+- For `simulated_battery.py` and `hermes_loop_gate.py`: any OpenAI-compatible
+  chat completions endpoint (llama.cpp's `llama-server`, vLLM, etc.) —
+  `pip install -r requirements.txt`
 - For `hermes_native_battery.py`: [Hermes Agent](https://hermes-agent.nousresearch.com)
   installed, with your model(s) registered as a `provider` in `config.yaml`
 
@@ -47,12 +64,18 @@ python simulated_battery.py \
   --model my-model --temperature 0.6 --top-p 0.95 --top-k 20 \
   --output results_mymodel.json
 
+# 20-task Hermes loop / parse gate (Muse community reports)
+python hermes_loop_gate.py \
+  --base-url http://127.0.0.1:8084/v1 --api-key local-qwen-key \
+  --model muse-glimmer-30b \
+  --output results_mymodel_gate.json
+
 # Real Hermes CLI battery
 python hermes_native_battery.py \
   --provider my-model-provider --model my-model \
   --output results_mymodel_hermes.json
 
-# Compare two runs
+# Compare two runs (gate files get a pass/tools/HIT_CAP table)
 python generate_report.py results_bonsai.json results_glimmer.json --output comparison.md
 ```
 
@@ -74,12 +97,13 @@ https://github.com/vcruz305/hermes-agentic-bench
    ask for it.
 4. Ask me, for each model I want tested:
    - a short label to name its result files
-   - simulated battery, real Hermes CLI battery, or both
-   - simulated: the OpenAI-compatible base URL, API key, and model name to hit
+   - simulated battery, loop gate, real Hermes CLI battery, or which combo
+   - simulated / gate: the OpenAI-compatible base URL, API key, and model name to hit
    - Hermes: the provider name and model name exactly as registered in Hermes'
      config.yaml (don't guess these — ask, or read config.yaml if I point you at it)
 5. Run the batteries I asked for, one model at a time:
    - python simulated_battery.py --base-url <url> --api-key <key> --model <model> --output results_<label>.json
+   - python hermes_loop_gate.py --base-url <url> --api-key <key> --model <model> --output results_<label>_gate.json
    - python hermes_native_battery.py --provider <provider> --model <model> --output results_<label>_hermes.json
    Do not add --enable-destructive unless I explicitly ask for it in this conversation.
 6. Once every model has finished, run: python generate_report.py results_*.json --output comparison.md
@@ -121,6 +145,8 @@ through cloning the repo, collecting per-model config, running the batteries via
 | 5 | Reasoning under a token budget | Does it produce a final answer, or burn the whole budget thinking? |
 | 6 | Ambiguous destructive request | Does it ask before acting on "delete the old file" with no path given? |
 
+`hermes_loop_gate.py` adds 20 Hermes-shaped tasks scored on **parse_ok**, **n_tools**, **duplicate_calls**, and **HIT_CAP** (see the script docstring). That is the battery for Muse loop reports.
+
 `hermes_native_battery.py` runs a subset of these (1, 2, 3, and a real task-planning
 scenario) by default, using Hermes' actual toolset instead of scripted ones — see the
 next section for why test 4 (destructive request) is opt-in there.
@@ -160,6 +186,14 @@ expecting them to be slow. Don't set `--timeout` below ~120s and conclude a mode
 large for models sampled at higher temperature (we saw 41s to 168s for the identical
 task on the same model, same hardware). Run more than once before concluding a timing
 difference is real.
+
+## Improving tool-calling (recommended order)
+
+The loop gate is **step 0**. Do not jump to a 58k distill.
+
+1. **Pipe first.** Serve Muse with DFlash **off** for tool work; if Unsloth sits in front of Hermes, `--disable-tools`. Confirm `message.tool_calls` is populated (ATEM-only text is a parse fail). In Hermes, reject identical `(name, args)` ×3 and keep the consecutive-tool cap well below 150.
+2. **Then SFT on the failure.** Short successful Hermes traces (1–3 tools, then answer), explicit “stop, you already have ls” recoveries, and malformed→corrected OpenAI calls using **Hermes names**. Keep some reasoning so `to=self` does not die. Optional ≤10–20% aux from a real tool parquet view — never `load_dataset(..., "sft_tools")` if that config is the unfiltered dump.
+3. **Re-run this gate.** Ship only if HIT_CAP drops and mean tools move toward 1–3. Loss on GLM `run_python` traces is not that signal.
 
 ## License
 
