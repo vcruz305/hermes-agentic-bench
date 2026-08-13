@@ -29,16 +29,27 @@ Three scripts, two levels of realism:
   itself informative (see "Known limitations" below).
 
 `generate_report.py` turns one or more result JSON files into a Markdown comparison table.
+Gate files also get a **pass / mean tools / HIT_CAP / parse-fail / dup** summary.
 
 This came out of an actual comparison ([Muse Glimmer 30B vs. Bonsai 27B](https://claude.ai/code/artifact/af013b83-dc66-4865-a6eb-ad7a2918cddf))
 where the simulated battery said one thing and the real Hermes sessions said another —
-that discrepancy is the reason this repo has two scripts instead of one.
+that discrepancy is the reason this repo has more than one script.
+
+## Latest
+
+- **`hermes_loop_gate.py`** — 20 Hermes-shaped tasks for the failure people actually report: the model *does* emit OpenAI `tool_calls`, then never stops (`HIT_CAP`), repeats `(name, args)`, or dumps ATEM/XML that Hermes cannot parse (`parse_fails`).
+- **`generate_report.py`** understands gate JSON (PASS/FAIL + tools + HIT_CAP + dups), not just elapsed seconds.
+- **[docs/muse-hermes-serve.md](docs/muse-hermes-serve.md)** — Muse + Hermes recipe: **DFlash off** for tool runs, Unsloth `--disable-tools`, modest context. 131k + speculation is how loops eat the Hermes tool cap.
+- **[docs/sft-notes.md](docs/sft-notes.md)** — a generic multi-teacher distill is the wrong *main* mix for this bug. Seal this gate before and after any SFT.
+
+A first Muse Glimmer UD-Q4_K_XL run (32k, DFlash off, one 24GB card) scored **7/20**, mean **5.7** tools, **7 HIT_CAP**, **0** parse-fail tasks. Short one-shots pass; open-ended `terminal`/`search` traces hit the 12-turn cap with no answer. Treat that as a labeled baseline, not a leaderboard. Re-run on your box.
 
 ## Prerequisites
 
 - Python 3.9+
-- For `simulated_battery.py`: any OpenAI-compatible chat completions endpoint
-  (llama.cpp's `llama-server`, vLLM, etc.) — `pip install -r requirements.txt`
+- For `simulated_battery.py` and `hermes_loop_gate.py`: any OpenAI-compatible
+  chat completions endpoint (llama.cpp's `llama-server`, vLLM, etc.) —
+  `pip install -r requirements.txt`
 - For `hermes_native_battery.py`: [Hermes Agent](https://hermes-agent.nousresearch.com)
   installed, with your model(s) registered as a `provider` in `config.yaml`
 
@@ -86,12 +97,13 @@ https://github.com/vcruz305/hermes-agentic-bench
    ask for it.
 4. Ask me, for each model I want tested:
    - a short label to name its result files
-   - simulated battery, real Hermes CLI battery, or both
-   - simulated: the OpenAI-compatible base URL, API key, and model name to hit
+   - simulated battery, loop gate, real Hermes CLI battery, or which combo
+   - simulated / gate: the OpenAI-compatible base URL, API key, and model name to hit
    - Hermes: the provider name and model name exactly as registered in Hermes'
      config.yaml (don't guess these — ask, or read config.yaml if I point you at it)
 5. Run the batteries I asked for, one model at a time:
    - python simulated_battery.py --base-url <url> --api-key <key> --model <model> --output results_<label>.json
+   - python hermes_loop_gate.py --base-url <url> --api-key <key> --model <model> --output results_<label>_gate.json
    - python hermes_native_battery.py --provider <provider> --model <model> --output results_<label>_hermes.json
    Do not add --enable-destructive unless I explicitly ask for it in this conversation.
 6. Once every model has finished, run: python generate_report.py results_*.json --output comparison.md
@@ -174,6 +186,14 @@ expecting them to be slow. Don't set `--timeout` below ~120s and conclude a mode
 large for models sampled at higher temperature (we saw 41s to 168s for the identical
 task on the same model, same hardware). Run more than once before concluding a timing
 difference is real.
+
+## Improving tool-calling (recommended order)
+
+The loop gate is **step 0**. Do not jump to a 58k distill.
+
+1. **Pipe first.** Serve Muse with DFlash **off** for tool work; if Unsloth sits in front of Hermes, `--disable-tools`. Confirm `message.tool_calls` is populated (ATEM-only text is a parse fail). In Hermes, reject identical `(name, args)` ×3 and keep the consecutive-tool cap well below 150.
+2. **Then SFT on the failure.** Short successful Hermes traces (1–3 tools, then answer), explicit “stop, you already have ls” recoveries, and malformed→corrected OpenAI calls using **Hermes names**. Keep some reasoning so `to=self` does not die. Optional ≤10–20% aux from a real tool parquet view — never `load_dataset(..., "sft_tools")` if that config is the unfiltered dump.
+3. **Re-run this gate.** Ship only if HIT_CAP drops and mean tools move toward 1–3. Loss on GLM `run_python` traces is not that signal.
 
 ## License
 
