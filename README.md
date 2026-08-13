@@ -187,14 +187,6 @@ large for models sampled at higher temperature (we saw 41s to 168s for the ident
 task on the same model, same hardware). Run more than once before concluding a timing
 difference is real.
 
-## Improving tool-calling (recommended order)
-
-The loop gate is **step 0**. Do not jump to a 58k distill.
-
-1. **Pipe first.** Serve Muse with DFlash **off** for tool work; if Unsloth sits in front of Hermes, `--disable-tools`. Confirm `message.tool_calls` is populated (ATEM-only text is a parse fail). In Hermes, reject identical `(name, args)` ×3 and keep the consecutive-tool cap well below 150.
-2. **Then SFT on the failure.** Short successful Hermes traces (1–3 tools, then answer), explicit “stop, you already have ls” recoveries, and malformed→corrected OpenAI calls using **Hermes names**. Keep some reasoning so `to=self` does not die. Optional ≤10–20% aux from a real tool parquet view — never `load_dataset(..., "sft_tools")` if that config is the unfiltered dump.
-3. **Re-run this gate.** Ship only if HIT_CAP drops and mean tools move toward 1–3. Loss on GLM `run_python` traces is not that signal.
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
