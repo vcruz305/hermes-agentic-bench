@@ -7,42 +7,42 @@
 
 # hermes-agentic-bench
 
-Small, honest agentic test batteries for local models — written because there's no
-published benchmark for models plugged into [Hermes Agent](https://hermes-agent.nousresearch.com),
-and static leaderboard numbers don't tell you whether a model can actually chain tools,
-recover from a failed call, or stay on task when something it needs isn't configured.
+Small, honest **Hermes Agent** test batteries for local models. Static
+leaderboards do not tell you whether a model can chain Hermes tools, recover
+from a failed call, or **stop** before the consecutive-tool cap.
 
-Three scripts, two levels of realism:
+**Start here (this is the Hermes bench):**
 
-- **`simulated_battery.py`** — talks directly to an OpenAI-compatible endpoint (e.g. a
-  local `llama-server`) with hand-scripted tool responses. Fast, cheap, good for a first
-  read on tool-calling and reasoning-budget behavior. Six scenarios.
-- **`hermes_loop_gate.py`** — **20-task gate** for the failure the community actually
-  reports on Muse+Hermes: valid OpenAI `tool_calls` that never stop (50–150 `terminal`
-  loops), duplicate `(name, args)`, ATEM/XML that Hermes cannot parse, or hitting the
-  turn cap with no user answer. Scripted Hermes-shaped tools (`terminal`, `read_file`,
-  `search_files`, `web_search`, `write_file`). Use this before claiming a fine-tune
-  helped. Serve notes: [docs/muse-hermes-serve.md](docs/muse-hermes-serve.md).
-- **`hermes_native_battery.py`** — drives the actual `hermes chat -q` CLI with real
-  toolsets and real tool failures. Slower and messier, but it's what your model will
-  actually do in production. **The batteries do not always agree** — that gap is
-  itself informative (see "Known limitations" below).
+- **`hermes_native_battery.py`** — `hermes chat -q` with real toolsets. Scores
+  **n_tools / HIT_CAP / pass** from the CLI footer (`N tool calls`). File
+  tools are **not** sandboxed (see Known limitations). Destructive test is
+  opt-in.
 
-`generate_report.py` turns one or more result JSON files into a Markdown comparison table.
-Gate files also get a **pass / mean tools / HIT_CAP / parse-fail / dup** summary.
+**Contract tests (no Hermes process — model + OpenAI server only):**
 
-This came out of an actual comparison ([Muse Glimmer 30B vs. Bonsai 27B](https://claude.ai/code/artifact/af013b83-dc66-4865-a6eb-ad7a2918cddf))
-where the simulated battery said one thing and the real Hermes sessions said another —
-that discrepancy is the reason this repo has more than one script.
+- **`hermes_loop_gate.py`** — 20 scripted-tool tasks for loops, dups, and
+  unparsed ATEM/XML. Fast. Use it to isolate weights vs harness.
+- **`simulated_battery.py`** — older 6-scenario smoke against the same
+  raw endpoint. Optional; the loop gate is the better simulated slot.
+
+`generate_report.py` compares result JSON. Gate/native files get a
+**pass / mean tools / HIT_CAP** summary.
+
+This came out of a Muse Glimmer vs Bonsai comparison
+([writeup](https://claude.ai/code/artifact/af013b83-dc66-4865-a6eb-ad7a2918cddf))
+where simulated and native **disagreed** — that gap is why both layers exist.
 
 ## Latest
 
-- **`hermes_loop_gate.py`** — 20 Hermes-shaped tasks for the failure people actually report: the model *does* emit OpenAI `tool_calls`, then never stops (`HIT_CAP`), repeats `(name, args)`, or dumps ATEM/XML that Hermes cannot parse (`parse_fails`).
-- **`generate_report.py`** understands gate JSON (PASS/FAIL + tools + HIT_CAP + dups), not just elapsed seconds.
-- **[docs/muse-hermes-serve.md](docs/muse-hermes-serve.md)** — Muse + Hermes recipe: **DFlash off** for tool runs, Unsloth `--disable-tools`, modest context. 131k + speculation is how loops eat the Hermes tool cap.
-- **[docs/sft-notes.md](docs/sft-notes.md)** — a generic multi-teacher distill is the wrong *main* mix for this bug. Seal this gate before and after any SFT.
+- Native battery now scores **n_tools / HIT_CAP / pass** from Hermes’s
+  `Messages: … (N tool calls)` footer — same shape as the loop gate.
+- **`hermes_loop_gate.py`** — 20-task simulated loop/parse gate (model + server).
+- Native CLI is the Hermes claim; the loop gate isolates weights.
+- Serve notes: [docs/muse-hermes-serve.md](docs/muse-hermes-serve.md).
 
-A first Muse Glimmer UD-Q4_K_XL run (32k, DFlash off, one 24GB card) scored **7/20**, mean **5.7** tools, **7 HIT_CAP**, **0** parse-fail tasks. Short one-shots pass; open-ended `terminal`/`search` traces hit the 12-turn cap with no answer. Treat that as a labeled baseline, not a leaderboard. Re-run on your box.
+A labeled **simulated** Muse Glimmer UD-Q4_K_XL run (32k, DFlash off) scored
+**7/20**, mean **5.7** tools, **7 HIT_CAP**, **0** parse-fail tasks. That is
+**not** a native Hermes score. Re-run both layers on your box.
 
 ## Prerequisites
 
@@ -58,25 +58,23 @@ A first Muse Glimmer UD-Q4_K_XL run (32k, DFlash off, one 24GB card) scored **7/
 ```bash
 pip install -r requirements.txt
 
-# Simulated battery against a raw endpoint
-python simulated_battery.py \
-  --base-url http://127.0.0.1:8080/v1 --api-key local-key \
-  --model my-model --temperature 0.6 --top-p 0.95 --top-k 20 \
-  --output results_mymodel.json
+# Hermes CLI (the product battery)
+python hermes_native_battery.py \
+  --provider muse-glimmer --model muse-glimmer-30b \
+  --output results_mymodel_hermes.json
 
-# 20-task Hermes loop / parse gate (Muse community reports)
+# Model+server loop gate (no Hermes process)
 python hermes_loop_gate.py \
   --base-url http://127.0.0.1:8084/v1 --api-key local-qwen-key \
   --model muse-glimmer-30b \
   --output results_mymodel_gate.json
 
-# Real Hermes CLI battery
-python hermes_native_battery.py \
-  --provider my-model-provider --model my-model \
-  --output results_mymodel_hermes.json
+# Optional older 6-test simulated smoke
+python simulated_battery.py \
+  --base-url http://127.0.0.1:8080/v1 --api-key local-key \
+  --model my-model --output results_mymodel.json
 
-# Compare two runs (gate files get a pass/tools/HIT_CAP table)
-python generate_report.py results_bonsai.json results_glimmer.json --output comparison.md
+python generate_report.py results_*_hermes.json results_*_gate.json --output comparison.md
 ```
 
 ## Run it with an agent

@@ -5,21 +5,26 @@ community Muse-Hermes release.
 
 | Mix | Role |
 |---|---|
-| Hermes-native short traces (5–15 tools, then answer) | primary |
-| Loop/recovery (“you already have `ls`, stop”) | primary |
-| Malformed → corrected OpenAI `tool_calls` | primary |
+| Short traces (1–3 tools, then answer) | primary |
+| Stop/recovery (“you already listed, answer”) | primary |
+| Dead tool: say unconfigured, don’t retry 8× | primary |
 | `r0b0tlab/.../data/sft_tools/*.parquet` | ≤10–20% aux only |
-| Full `sft_balanced` / named HF configs | no — configs currently dump the same ~890k mix |
+| Full `sft_balanced` / named HF configs | no |
 
 Student: Muse Glimmer QLoRA (`FastModel`, 24GB, vision off, `offload_embedding=True`).
-Loss from `<|start|>assistant` so tool turns train. Keep some `reasoning_content`
-or `to=self` dies.
+Loss from `<|start|>assistant`. Keep some `reasoning_content` or `to=self` dies.
 
-Load the r0b0tlab tool slice with explicit parquet paths, not
-`load_dataset(repo, "sft_tools")`.
+**Paired Muse UD-Q4_K_XL (DFlash off, 32k):**
 
-License: Muse is Apache-2.0; that distill is `license: other`. Don’t ship it as
-the public mix without reading `LICENSE` / `PROVENANCE.md`.
+| Layer | Score | Read |
+|---|---|---|
+| Simulated loop gate | 7/20, mean 5.7, **7 HIT_CAP** | empty answers on open-ended tools |
+| Native Hermes CLI | 4/5, mean **2.8**, **0 HIT_CAP** | list/file/math/plan stop; web 8 calls because Firecrawl unset |
 
-Seal this repo’s `hermes_loop_gate.py` **before** and **after** SFT. No upload
-until pass rate and mean-tools move the right way.
+SFT = **stop after 1–2 tools** and **don’t thrash a dead tool**, not “learn more tools.”
+Native file cwd is often HERMES_HOME — don’t use those traces as labels.
+
+Load r0b0tlab with explicit `data/sft_tools/*.parquet`, not `load_dataset(..., "sft_tools")`.
+
+Muse is Apache-2.0; that distill is `license: other`. Seal both
+`hermes_loop_gate.py` and `hermes_native_battery.py` before/after SFT.
