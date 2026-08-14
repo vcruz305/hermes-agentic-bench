@@ -14,9 +14,10 @@ from a failed call, or **stop** before the consecutive-tool cap.
 **Start here (this is the Hermes bench):**
 
 - **`hermes_native_battery.py`** — `hermes chat -q` with real toolsets. Scores
-  **n_tools / HIT_CAP / pass** from the CLI footer (`N tool calls`). File
-  tools are **not** sandboxed (see Known limitations). Destructive test is
-  opt-in.
+  **n_tools / HIT_CAP / pass** from the CLI footer, previews, or the Hermes
+  session DB (needed for `-Q`). File tools are **not** sandboxed (see Known
+  limitations). Destructive test is opt-in. Residual tasks catch dummy
+  no-tool calls and refuse-delete.
 
 **Contract tests (no Hermes process — model + OpenAI server only):**
 
@@ -34,8 +35,11 @@ where simulated and native **disagreed** — that gap is why both layers exist.
 
 ## Latest
 
-- Native battery now scores **n_tools / HIT_CAP / pass** from Hermes’s
-  `Messages: … (N tool calls)` footer — same shape as the loop gate.
+- Native battery scores **n_tools / HIT_CAP / pass** from the CLI footer,
+  tool previews, or the Hermes **session DB** when `hermes chat -Q` hides
+  the footer. Tasks that need a tool set `min_tools` (0 tools is no longer
+  a free pass). Residual tasks: no-tool definition, refuse-delete (file
+  tools only — no `terminal`).
 - **`hermes_loop_gate.py`** — 20-task simulated loop/parse gate (model + server).
 - Native CLI is the Hermes claim; the loop gate isolates weights.
 - Serve notes: [docs/muse-hermes-serve.md](docs/muse-hermes-serve.md).
